@@ -14,33 +14,28 @@ namespace JobConsumer
     {
         public SentencesValidator() { }
 
-        public Task<List<SentenceResult>> UpdateSentenceResults(Stream transcriptionJob,List<string> sentences) 
+        public Task UpdateSentenceResults(Stream transcriptionJob, List<SentenceResult> sentences)
         {
             var source = ConvertStreamToString(transcriptionJob);
-            var results = (from sentence in sentences
-                           select ValidateSentence(source, sentence) into res
-                           where res != null
-                           select res).ToList();
+            foreach (var sentenceResult in sentences)
+            {
+                ValidateSentence(source, sentenceResult);
+            }
 
-            return Task.FromResult(results);
+            return Task.CompletedTask;
         }
 
-        private SentenceResult ValidateSentence(string source, string sentence) 
+        private void ValidateSentence(string source, SentenceResult sentence) 
         {
-            var regex = new Regex(sentence, RegexOptions.Compiled | RegexOptions.IgnoreCase);
+            var regex = new Regex(sentence.PlainText, RegexOptions.Compiled | RegexOptions.IgnoreCase);
             var matches = regex.Matches(source);
             if (matches.Count > 0) 
             {
                 var matche = matches[0];
-                return new SentenceResult()
-                {
-                    WasPresent = true,
-                    PlainText = sentence,
-                    StartIndex = matche.Index,
-                    EndIndex = matche.Index + sentence.Length
-                };
+                sentence.WasPresent = true;
+                sentence.StartIndex = matche.Index;
+                sentence.EndIndex = matche.Length;
             }
-            return null;
         }
 
         private string ConvertStreamToString(Stream transcriptionJob) 

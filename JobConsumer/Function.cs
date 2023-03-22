@@ -37,13 +37,21 @@ public class Function
     private async Task ProcessMessageAsync(SQSEvent.SQSMessage message, ILambdaContext context)
     {
         context.Logger.LogInformation($"Processed message {message.Body}");
-
         Guid.TryParse(message.Body, out var jobId);
-        var job = await _dynamoDbContext.LoadAsync<Job>(jobId);
-        var stream =  await _transcribeWrapper.GetTranscription(jobId.ToString(), job.AudioUrl);
-        var results = await _sentencesValidator.UpdateSentenceResults(stream, job.Sentences.Select(x => x.PlainText).ToList());
-        job.Sentences = results;
-        await _dynamoDbContext.SaveAsync(job);
-        await Task.CompletedTask;
+        Job job = await _dynamoDbContext.LoadAsync<Job>(jobId);
+        try
+        {
+            var stream = await _transcribeWrapper.GetTranscription(jobId.ToString(), job.AudioUrl);
+            await _sentencesValidator.UpdateSentenceResults(stream, job.Sentences);
+            job.Status = JobStatus.Complete;
+            await _dynamoDbContext.SaveAsync(job);
+            await Task.CompletedTask;
+        }
+        catch (Exception ex)
+        {
+            job.Status = JobStatus.Failed;
+            await _dynamoDbContext.SaveAsync(job);
+            context.Logger.LogInformation($"Processed message failed for {jobId} with error ----> {ex.Message}");
+        }
     }
 }
